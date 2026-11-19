@@ -36,7 +36,9 @@ class RouteMap extends StatelessWidget {
                   top: 12,
                   child: _chip(
                     Icons.near_me_rounded,
-                    '${distanceKm.toStringAsFixed(1)} km',
+                    distanceKm > 0
+                        ? '${distanceKm.toStringAsFixed(1)} km'
+                        : 'Route preview',
                   ),
                 ),
                 Positioned(

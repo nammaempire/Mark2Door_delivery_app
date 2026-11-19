@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/config/env.dart';
+import '../../../core/providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../domain/delivery_order.dart';
@@ -104,13 +105,14 @@ class PaymentPill extends StatelessWidget {
 }
 
 /// Store -> customer, drawn as two stops joined by a line.
-class RouteSummary extends StatelessWidget {
+class RouteSummary extends ConsumerWidget {
   const RouteSummary({super.key, required this.order});
 
   final DeliveryOrder order;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final store = ref.watch(storeInfoProvider);
     Widget stop(IconData icon, Color color, String title, String subtitle) {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -159,8 +161,8 @@ class RouteSummary extends StatelessWidget {
         stop(
           Icons.storefront_rounded,
           AppColors.accentDark,
-          AppConfig.storeName,
-          AppConfig.storeAddress,
+          store.name,
+          store.address,
         ),
         Align(
           alignment: Alignment.centerLeft,
@@ -209,7 +211,12 @@ class OrderFacts extends StatelessWidget {
       spacing: 16,
       runSpacing: 6,
       children: [
-        fact(Icons.near_me_rounded, '${order.distanceKm.toStringAsFixed(1)} km'),
+        // Distance is known only once the map integration is connected.
+        if (order.distanceKm > 0)
+          fact(
+            Icons.near_me_rounded,
+            '${order.distanceKm.toStringAsFixed(1)} km',
+          ),
         fact(
           Icons.shopping_bag_outlined,
           '${order.itemCount} item${order.itemCount == 1 ? '' : 's'}',

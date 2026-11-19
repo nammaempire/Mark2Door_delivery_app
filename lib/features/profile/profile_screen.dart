@@ -38,6 +38,7 @@ class ProfileScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final store = ref.watch(storeInfoProvider);
     final user = ref.watch(currentUserProvider);
     final onDuty = ref.watch(onDutyProvider);
 
@@ -98,13 +99,13 @@ class ProfileScreen extends ConsumerWidget {
                   onChanged: ref.read(onDutyProvider.notifier).set,
                 ),
                 const Divider(indent: 16, endIndent: 16),
-                const ListTile(
-                  leading: Icon(Icons.storefront_outlined),
+                ListTile(
+                  leading: const Icon(Icons.storefront_outlined),
                   title: Text(
-                    AppConfig.storeName,
-                    style: TextStyle(fontWeight: FontWeight.w600),
+                    store.name,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  subtitle: Text('Pickup point · ${AppConfig.storeAddress}'),
+                  subtitle: Text('Pickup point · ${store.address}'),
                 ),
               ],
             ),

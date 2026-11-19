@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mart2door_delivery/core/providers.dart';
+import 'package:mart2door_delivery/features/orders/data/firestore_delivery_repository.dart';
 import 'package:mart2door_delivery/app.dart';
 import 'package:mart2door_delivery/core/storage/local_store.dart';
 import 'package:mart2door_delivery/features/auth/presentation/login_screen.dart';
@@ -163,5 +165,69 @@ void main() {
         hasLength(2),
       );
     });
+  });
+
+  test('Firestore order maps to what the rider collects and delivers', () {
+    final order = FirestoreDeliveryRepository.orderFromMap('abc123XYZ', {
+      'items': [
+        {'name': 'Milk', 'unit': '500 ml', 'quantity': 2, 'pricePaise': 2700},
+      ],
+      'totalPaise': 9200,
+      'walletAppliedPaise': 2500,
+      'paymentMethod': 'cod',
+      'status': 'accepted',
+      'createdAt': 1795000000000,
+      'address': {
+        'name': 'Navi',
+        'phone': '9876543210',
+        'line1': '12, 4th Cross',
+        'landmark': 'Near park',
+        'pincode': '627004',
+      },
+    });
+    expect(order.displayId, '#123XYZ');
+    expect(order.itemCount, 2);
+    // Cash at the door is the total less what the wallet already paid.
+    expect(order.cashToCollectPaise, 6700);
+    expect(order.isActive, isTrue);
+    expect(order.fullAddress, '12, 4th Cross, Near park, 627004');
+    expect(
+      order.etaAt,
+      DateTime.fromMillisecondsSinceEpoch(1795000000000)
+          .add(const Duration(minutes: 30)),
+    );
+
+    final paidOnline = FirestoreDeliveryRepository.orderFromMap('x', {
+      'totalPaise': 5000,
+      'paymentMethod': 'online',
+      'status': 'placed',
+    });
+    expect(paidOnline.cashToCollectPaise, 0);
+    expect(paidOnline.isNew, isTrue);
+  });
+
+  testWidgets('a number the admin has not added is told how to get access', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues(
+      {LocalStore.demoSessionKey: '+919900011111'},
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          riderProfileProvider.overrideWith((ref) async => null),
+        ],
+        child: const DeliveryApp(),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 3)); // splash
+    await tester.pumpAndSettle();
+    expect(find.text('This number is not registered'), findsOneWidget);
+    expect(find.textContaining('+919900011111'), findsOneWidget);
   });
 }

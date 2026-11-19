@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/config/env.dart';
 import '../../../core/providers.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_theme.dart';
@@ -46,6 +45,7 @@ class _PickupScreenState extends ConsumerState<PickupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final store = ref.watch(storeInfoProvider);
     final order = ref.watch(orderProvider(widget.orderId));
 
     return Scaffold(
@@ -101,11 +101,11 @@ class _PickupScreenState extends ConsumerState<PickupScreen> {
                             ),
                           ),
                           const SizedBox(width: 12),
-                          const Expanded(
+                          Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
+                                const Text(
                                   'Pick up from',
                                   style: TextStyle(
                                     fontSize: 12,
@@ -113,16 +113,16 @@ class _PickupScreenState extends ConsumerState<PickupScreen> {
                                   ),
                                 ),
                                 Text(
-                                  AppConfig.storeName,
-                                  style: TextStyle(
+                                  store.name,
+                                  style: const TextStyle(
                                     fontSize: 15,
                                     fontWeight: FontWeight.w800,
                                     color: AppColors.textDark,
                                   ),
                                 ),
                                 Text(
-                                  AppConfig.storeAddress,
-                                  style: TextStyle(
+                                  store.address,
+                                  style: const TextStyle(
                                     fontSize: 12,
                                     height: 1.35,
                                     color: AppColors.textMuted,
@@ -136,7 +136,7 @@ class _PickupScreenState extends ConsumerState<PickupScreen> {
                             icon: const Icon(Icons.navigation_rounded),
                             onPressed: () => Launchers.navigateTo(
                               context,
-                              AppConfig.storeAddress,
+                              store.address,
                             ),
                           ),
                         ],

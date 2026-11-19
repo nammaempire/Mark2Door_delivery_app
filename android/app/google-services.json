@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "610201387973",
+    "project_id": "mart2door-b62df",
+    "storage_bucket": "mart2door-b62df.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:610201387973:android:bc9dc29dca5edc9bbe01ac",
+        "android_client_info": {
+          "package_name": "com.mart2door.mart2door"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBz4BRiAkKuGYieF-9JWU7d7rFTHR_JBiY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:610201387973:android:12f5cc9ba2ab3d89be01ac",
+        "android_client_info": {
+          "package_name": "com.mart2door.mart2door_delivery"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBz4BRiAkKuGYieF-9JWU7d7rFTHR_JBiY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,8 +1,19 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 /// Compile-time configuration, supplied with `--dart-define`.
 abstract final class Env {
-  /// false => in-memory sample data. The Firebase implementations are
-  /// added when the three apps are connected to one project.
-  static const bool useFirebase = bool.fromEnvironment('USE_FIREBASE');
+  /// The app uses Firebase unless it is started with
+  /// `--dart-define=USE_FIREBASE=false`, which switches to in-memory sample
+  /// data. Automated tests always run on sample data.
+  static final bool useFirebase = _firebaseFlag && !_runningTests;
+
+  static const bool _firebaseFlag =
+      bool.fromEnvironment('USE_FIREBASE', defaultValue: true);
+
+  static bool get _runningTests =>
+      !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST');
 }
 
 abstract final class AppConfig {
@@ -12,9 +23,4 @@ abstract final class AppConfig {
   /// OTP accepted by the sample-data auth repository.
   static const String demoOtp = '123456';
 
-  /// Pickup point shown to riders. Will come from the admin's store
-  /// settings once Firebase is connected.
-  static const String storeName = 'mart2door Store';
-  static const String storeAddress = '80 Feet Road, Koramangala 4th Block, '
-      'Bengaluru 560034';
 }
