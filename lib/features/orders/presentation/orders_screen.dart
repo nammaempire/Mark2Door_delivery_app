@@ -217,7 +217,7 @@ class _Header extends ConsumerWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF14915A), AppColors.primaryDark],
+          colors: [AppColors.primaryLight, AppColors.primaryDark],
         ),
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
       ),

@@ -52,7 +52,7 @@ class HistoryScreen extends ConsumerWidget {
                     label: 'Delivered today',
                     value: '${stats.deliveries}',
                     icon: Icons.check_circle_rounded,
-                    colors: const [Color(0xFF1FA463), Color(0xFF0A6B40)],
+                    colors: const [AppColors.primaryLight, AppColors.primaryDark],
                   ),
                   const SizedBox(width: 12),
                   _SummaryTile(
@@ -173,12 +173,12 @@ class _HistoryRow extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: AppColors.primarySoft,
+                color: AppColors.successSoft,
                 borderRadius: BorderRadius.circular(13),
               ),
               child: const Icon(
                 Icons.check_rounded,
-                color: AppColors.primary,
+                color: AppColors.success,
               ),
             ),
             const SizedBox(width: 12),
@@ -227,7 +227,7 @@ class _HistoryRow extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                     color: order.cashOnDelivery
                         ? AppColors.accentDark
-                        : AppColors.primary,
+                        : AppColors.success,
                   ),
                 ),
               ],

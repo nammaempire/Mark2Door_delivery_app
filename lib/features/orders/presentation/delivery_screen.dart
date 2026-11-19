@@ -234,7 +234,8 @@ class _CashCard extends StatelessWidget {
     final cod = order.cashOnDelivery;
     final colors = cod
         ? const [Color(0xFFFFA94D), Color(0xFFF2600C)]
-        : const [Color(0xFF1FA463), Color(0xFF0A6B40)];
+        // Paid: success green, not the brand colour.
+        : const [Color(0xFF27A86B), Color(0xFF14784A)];
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -372,13 +373,13 @@ class _DeliveredDialog extends StatelessWidget {
             width: 84,
             height: 84,
             decoration: const BoxDecoration(
-              color: AppColors.primarySoft,
+              color: AppColors.successSoft,
               shape: BoxShape.circle,
             ),
             child: const Icon(
               Icons.check_circle_rounded,
               size: 52,
-              color: AppColors.primary,
+              color: AppColors.success,
             ),
           ),
           const SizedBox(height: 18),

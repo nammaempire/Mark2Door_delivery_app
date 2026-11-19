@@ -114,10 +114,10 @@ class _MapPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFFE9F1EC));
+    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFFF7ECEE));
 
     // City blocks.
-    final block = Paint()..color = const Color(0xFFDCE9E1);
+    final block = Paint()..color = const Color(0xFFEFDDE1);
     const cols = 5, rows = 4, gap = 14.0;
     final bw = (size.width - gap * (cols + 1)) / cols;
     final bh = (size.height - gap * (rows + 1)) / rows;
@@ -138,7 +138,7 @@ class _MapPainter extends CustomPainter {
         Rect.fromLTWH(gap + 2 * (bw + gap), gap + (bh + gap), bw, bh),
         const Radius.circular(8),
       ),
-      Paint()..color = const Color(0xFFC4E4CF),
+      Paint()..color = const Color(0xFFD5EBD9),
     );
 
     // Route follows the streets: right, up, right.

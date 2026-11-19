@@ -20,9 +20,9 @@ class SoftCard extends StatelessWidget {
         borderRadius: radius,
         boxShadow: const [
           BoxShadow(
-            color: Color(0x12142318),
-            blurRadius: 18,
-            offset: Offset(0, 6),
+            color: Color(0x24800020),
+            blurRadius: 10,
+            offset: Offset(0, 3),
           ),
         ],
       ),
@@ -97,7 +97,7 @@ class PaymentPill extends StatelessWidget {
           )
         : const Pill(
             'Paid online',
-            AppColors.primary,
+            AppColors.success,
             icon: Icons.check_circle_rounded,
           );
   }
