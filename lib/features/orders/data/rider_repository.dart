@@ -32,6 +32,15 @@ abstract interface class RiderRepository {
   Future<RiderProfile?> fetchRider(String phone);
 
   Stream<StoreInfo> watchStore();
+
+  /// Tells the store whether the rider with [phone] (10 digits) is taking
+  /// orders, so the admin sees them as Available or Off duty.
+  Future<void> setActive(String phone, {required bool active});
+
+  /// Removes the rider registered with [phone] (10 digits), for a rider
+  /// deleting their own account. They disappear from the admin's rider
+  /// list; orders they delivered keep their name.
+  Future<void> deleteRider(String phone);
 }
 
 class FakeRiderRepository implements RiderRepository {
@@ -42,10 +51,23 @@ class FakeRiderRepository implements RiderRepository {
 
   @override
   Future<RiderProfile?> fetchRider(String phone) async =>
-      const RiderProfile(name: 'Delivery partner', active: true);
+      const RiderProfile(name: 'Suresh Kumar', active: true);
 
   @override
   Stream<StoreInfo> watchStore() => Stream.value(store);
+
+  /// What the rider last told the store, by phone number.
+  final availability = <String, bool>{};
+
+  @override
+  Future<void> setActive(String phone, {required bool active}) async =>
+      availability[phone] = active;
+
+  /// Phone numbers whose rider record was deleted.
+  final deleted = <String>{};
+
+  @override
+  Future<void> deleteRider(String phone) async => deleted.add(phone);
 }
 
 class FirestoreRiderRepository implements RiderRepository {
@@ -80,4 +102,29 @@ class FirestoreRiderRepository implements RiderRepository {
           address: address.isEmpty ? StoreInfo.unknown.address : address,
         );
       });
+
+  @override
+  Future<void> setActive(String phone, {required bool active}) async {
+    if (phone.isEmpty) return;
+    final snap = await _db
+        .collection('riders')
+        .where('phone', isEqualTo: phone)
+        .limit(1)
+        .get();
+    for (final doc in snap.docs) {
+      await doc.reference.update({'active': active});
+    }
+  }
+
+  @override
+  Future<void> deleteRider(String phone) async {
+    if (phone.isEmpty) return;
+    final snap = await _db
+        .collection('riders')
+        .where('phone', isEqualTo: phone)
+        .get();
+    for (final doc in snap.docs) {
+      await doc.reference.delete();
+    }
+  }
 }

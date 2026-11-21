@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,6 +9,7 @@ import '../features/auth/data/auth_repository.dart';
 import '../features/auth/data/fake_auth_repository.dart';
 import '../features/auth/data/firebase_auth_repository.dart';
 import '../features/orders/data/delivery_repository.dart';
+import '../features/orders/data/device_services.dart';
 import '../features/orders/data/fake_delivery_repository.dart';
 import '../features/orders/data/firestore_delivery_repository.dart';
 import '../features/orders/data/rider_repository.dart';
@@ -63,3 +66,33 @@ final storeInfoProvider = Provider<StoreInfo>((ref) {
 final _storeInfoStreamProvider = StreamProvider<StoreInfo>(
   (ref) => ref.watch(riderRepositoryProvider).watchStore(),
 );
+
+final proofPhotoServiceProvider = Provider<ProofPhotoService>((ref) {
+  return Env.useFirebase
+      ? FirebaseProofPhotoService(FirebaseStorage.instance)
+      : FakeProofPhotoService();
+});
+
+final pushServiceProvider = Provider<PushService>((ref) {
+  return Env.useFirebase
+      ? FirebasePushService(
+          FirebaseMessaging.instance,
+          FirebaseFirestore.instance,
+        )
+      : FakePushService();
+});
+
+/// Registers this phone for new-order notifications once a rider is signed
+/// in. Watched by the home screen; failing to register never blocks the app.
+final pushRegistrationProvider = FutureProvider<void>((ref) async {
+  final phone = await ref.watch(riderPhoneProvider.future);
+  if (phone.isEmpty) return;
+  try {
+    await ref.watch(pushServiceProvider).register(phone);
+    debugPrint('PUSH: registered this phone for rider $phone');
+  } on Exception catch (e) {
+    debugPrint('PUSH: could not register rider $phone: $e');
+    // No Play services, no network, or permission refused: the rider still
+    // sees orders in the app.
+  }
+});

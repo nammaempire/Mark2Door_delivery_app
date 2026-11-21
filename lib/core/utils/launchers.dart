@@ -4,11 +4,19 @@ import 'package:url_launcher/url_launcher.dart';
 /// Hand-offs to other apps. Each shows a message if the phone has nothing
 /// that can handle the request.
 abstract final class Launchers {
-  /// Opens turn-by-turn directions to [address] in Google Maps.
-  static Future<void> navigateTo(BuildContext context, String address) {
+  /// Opens turn-by-turn directions in Google Maps: to the customer's own
+  /// pin when the order has one, otherwise to the typed [address].
+  static Future<void> navigateTo(
+    BuildContext context,
+    String address, {
+    double? latitude,
+    double? longitude,
+  }) {
     final uri = Uri.https('www.google.com', '/maps/dir/', {
       'api': '1',
-      'destination': address,
+      'destination': latitude != null && longitude != null
+          ? '$latitude,$longitude'
+          : address,
       'travelmode': 'two-wheeler',
     });
     return _open(context, uri, "Couldn't open Maps on this phone.");

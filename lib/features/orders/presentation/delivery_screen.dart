@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/config/env.dart';
 import '../../../core/providers.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_theme.dart';
@@ -9,8 +10,10 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/utils/launchers.dart';
 import '../../../core/widgets/async_value_view.dart';
 import '../application/delivery_providers.dart';
+import '../application/pending_deliveries.dart';
 import '../domain/delivery_order.dart';
 import 'order_widgets.dart';
+import 'live_route_map.dart';
 import 'route_map.dart';
 
 /// On the way to the customer: route, contact, what to collect, and the
@@ -28,21 +31,29 @@ class _DeliveryScreenState extends ConsumerState<DeliveryScreen> {
   bool _saving = false;
 
   Future<void> _markDelivered(DeliveryOrder order) async {
-    final confirmed = await showModalBottomSheet<bool>(
+    // The sheet hands back where the delivery photo was saved on the phone,
+    // once the rider has taken it (and, for cash orders, confirmed the
+    // money).
+    final photoPath = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       backgroundColor: AppColors.surface,
       builder: (_) => _ConfirmSheet(order: order),
     );
-    if (!(confirmed ?? false) || !mounted || _saving) return;
+    if (photoPath == null || !mounted || _saving) return;
 
     setState(() => _saving = true);
     try {
-      await ref.read(deliveryRepositoryProvider).markDelivered(order.id);
+      // Sent now when there is signal; otherwise kept on the phone and
+      // sent by itself later. Either way the rider is finished here.
+      final sent = await ref
+          .read(pendingDeliveriesProvider.notifier)
+          .deliver(order.id, photoPath);
       if (!mounted) return;
       await showDialog<void>(
         context: context,
-        builder: (_) => _DeliveredDialog(order: order),
+        builder: (_) => _DeliveredDialog(order: order, sentToStore: sent),
       );
       if (mounted) context.go(Routes.home);
     } catch (_) {
@@ -76,10 +87,21 @@ class _DeliveryScreenState extends ConsumerState<DeliveryScreen> {
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    RouteMap(
-                      distanceKm: o.distanceKm,
-                      eta: formatTime(o.etaAt),
-                    ),
+                    // A live Google Map on real orders; the drawn preview
+                    // in sample-data mode, where there is no real address.
+                    if (Env.useFirebase)
+                      LiveRouteMap(
+                        address: o.fullAddress,
+                        pincode: o.pincode,
+                        eta: formatTime(o.etaAt),
+                        latitude: o.latitude,
+                        longitude: o.longitude,
+                      )
+                    else
+                      RouteMap(
+                        distanceKm: o.distanceKm,
+                        eta: formatTime(o.etaAt),
+                      ),
                     const SizedBox(height: 16),
                     SoftCard(
                       child: Column(
@@ -98,7 +120,7 @@ class _DeliveryScreenState extends ConsumerState<DeliveryScreen> {
                                 ),
                               ),
                               const SizedBox(width: 8),
-                        Flexible(child: PaymentPill(order: o)),
+                              Flexible(child: PaymentPill(order: o)),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -143,6 +165,8 @@ class _DeliveryScreenState extends ConsumerState<DeliveryScreen> {
                                   onPressed: () => Launchers.navigateTo(
                                     context,
                                     o.fullAddress,
+                                    latitude: o.latitude,
+                                    longitude: o.longitude,
                                   ),
                                   style: FilledButton.styleFrom(
                                     minimumSize: const Size.fromHeight(48),
@@ -285,24 +309,53 @@ class _CashCard extends StatelessWidget {
   }
 }
 
-/// Final check before an order is marked delivered. Cash orders require
-/// the rider to confirm the money was collected.
-class _ConfirmSheet extends StatefulWidget {
+/// Final check before an order is marked delivered. Every order needs a
+/// photo of the handover as proof; cash orders also require the rider to
+/// confirm the money was collected. Pops with where the photo was saved on
+/// the phone. Taking the photo needs no signal.
+class _ConfirmSheet extends ConsumerStatefulWidget {
   const _ConfirmSheet({required this.order});
 
   final DeliveryOrder order;
 
   @override
-  State<_ConfirmSheet> createState() => _ConfirmSheetState();
+  ConsumerState<_ConfirmSheet> createState() => _ConfirmSheetState();
 }
 
-class _ConfirmSheetState extends State<_ConfirmSheet> {
+class _ConfirmSheetState extends ConsumerState<_ConfirmSheet> {
   bool _cashCollected = false;
+  bool _uploading = false;
+  String? _photoPath;
+  String? _photoError;
+
+  Future<void> _takePhoto() async {
+    if (_uploading) return;
+    setState(() {
+      _uploading = true;
+      _photoError = null;
+    });
+    try {
+      final path = await ref
+          .read(proofPhotoServiceProvider)
+          .capture(widget.order.id);
+      if (!mounted) return;
+      // null: the rider closed the camera without taking a photo.
+      setState(() => _photoPath = path ?? _photoPath);
+    } on Exception {
+      if (!mounted) return;
+      setState(
+        () => _photoError = "Couldn't save the photo. Try again.",
+      );
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final order = widget.order;
-    final ready = !order.cashOnDelivery || _cashCollected;
+    final hasPhoto = _photoPath != null;
+    final ready = hasPhoto && (!order.cashOnDelivery || _cashCollected);
 
     return SafeArea(
       child: Padding(
@@ -324,8 +377,45 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
               'Delivering to ${order.customerName}. This cannot be undone.',
               style: const TextStyle(color: AppColors.textMuted),
             ),
+            const SizedBox(height: 14),
+            OutlinedButton.icon(
+              key: const ValueKey('take-photo-button'),
+              onPressed: _uploading ? null : _takePhoto,
+              icon: _uploading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      hasPhoto
+                          ? Icons.check_circle_rounded
+                          : Icons.photo_camera_rounded,
+                      color: hasPhoto ? AppColors.success : null,
+                    ),
+              label: Text(
+                _uploading
+                    ? 'Saving photo…'
+                    : hasPhoto
+                        ? 'Photo added · tap to retake'
+                        : 'Take delivery photo',
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _photoError ??
+                  'Photograph the order at the door or with the customer. '
+                      'The store sees this photo.',
+              key: const ValueKey('photo-hint'),
+              style: TextStyle(
+                fontSize: 12,
+                color: _photoError == null
+                    ? AppColors.textMuted
+                    : AppColors.danger,
+              ),
+            ),
             if (order.cashOnDelivery) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               CheckboxListTile(
                 key: const ValueKey('cash-collected-checkbox'),
                 value: _cashCollected,
@@ -342,12 +432,13 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
             const SizedBox(height: 16),
             FilledButton(
               key: const ValueKey('confirm-delivered-button'),
-              onPressed: ready ? () => Navigator.of(context).pop(true) : null,
+              onPressed:
+                  ready ? () => Navigator.of(context).pop(_photoPath) : null,
               child: const Text('Confirm delivered'),
             ),
             const SizedBox(height: 8),
             TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
+              onPressed: () => Navigator.of(context).pop(),
               child: const Text('Not yet'),
             ),
           ],
@@ -358,9 +449,12 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
 }
 
 class _DeliveredDialog extends StatelessWidget {
-  const _DeliveredDialog({required this.order});
+  const _DeliveredDialog({required this.order, required this.sentToStore});
 
   final DeliveryOrder order;
+
+  /// False when there was no signal and the delivery is kept on the phone.
+  final bool sentToStore;
 
   @override
   Widget build(BuildContext context) {
@@ -401,6 +495,32 @@ class _DeliveredDialog extends StatelessWidget {
             textAlign: TextAlign.center,
             style: const TextStyle(height: 1.4, color: AppColors.textMuted),
           ),
+          if (!sentToStore) ...[
+            const SizedBox(height: 12),
+            Container(
+              key: const ValueKey('saved-offline-note'),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withAlpha(30),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.cloud_off_rounded, size: 20),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'No signal. This delivery and its photo are saved on '
+                      'your phone and will be sent to the store by '
+                      'themselves when you are back online.',
+                      style: TextStyle(fontSize: 13, height: 1.35),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
       actionsAlignment: MainAxisAlignment.center,

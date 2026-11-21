@@ -19,7 +19,7 @@ class HistoryScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Delivery history')),
       body: AsyncValueView(
         value: orders,
-        onRetry: () => ref.invalidate(ordersProvider),
+        onRetry: () => ref.invalidate(serverOrdersProvider),
         data: (all) {
           final now = DateTime.now();
           final done = all
@@ -57,7 +57,10 @@ class HistoryScreen extends ConsumerWidget {
                   const SizedBox(width: 12),
                   _SummaryTile(
                     label: 'Cash to hand over',
-                    value: formatPaise(stats.cashPaise),
+                    // Everything not yet confirmed by the store, from
+                    // any day; zero once the admin marks it received.
+                    value: formatPaise(cashToHandOver(all)),
+                    valueKey: const ValueKey('cash-to-hand-over'),
                     icon: Icons.payments_rounded,
                     colors: const [Color(0xFFFFA94D), Color(0xFFF2600C)],
                   ),
@@ -85,12 +88,14 @@ class _SummaryTile extends StatelessWidget {
     required this.value,
     required this.icon,
     required this.colors,
+    this.valueKey,
   });
 
   final String label;
   final String value;
   final IconData icon;
   final List<Color> colors;
+  final Key? valueKey;
 
   @override
   Widget build(BuildContext context) {
@@ -115,6 +120,7 @@ class _SummaryTile extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: Text(
                 value,
+                key: valueKey,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 24,
@@ -205,6 +211,45 @@ class _HistoryRow extends StatelessWidget {
                       color: AppColors.textMuted,
                     ),
                   ),
+                  if (order.awaitingSync)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.cloud_off_rounded,
+                            size: 14,
+                            color: AppColors.warning,
+                          ),
+                          SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              'Waiting for signal to tell the store',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.warning,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (order.rating != null)
+                    Row(
+                      children: [
+                        for (var i = 1; i <= 5; i++)
+                          Icon(
+                            i <= order.rating!
+                                ? Icons.star_rounded
+                                : Icons.star_outline_rounded,
+                            size: 15,
+                            color: const Color(0xFFE8A200),
+                          ),
+                      ],
+                    ),
                 ],
               ),
             ),

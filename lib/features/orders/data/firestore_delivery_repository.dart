@@ -21,6 +21,27 @@ class FirestoreDeliveryRepository implements DeliveryRepository {
   CollectionReference<Map<String, dynamic>> get _orders =>
       _db.collection('orders');
 
+  /// Firestore saves a change on the phone straight away and sends it to
+  /// the server when there is signal, also after the app is reopened. The
+  /// write only "finishes" once the server has it, so waiting for that
+  /// would freeze the screen with no signal. This waits a few seconds and
+  /// then lets the rider carry on; the change is already safe on the phone.
+  Future<void> _send(Future<void> write) =>
+      write.timeout(const Duration(seconds: 4), onTimeout: () {});
+
+  /// Reads an order from what is already on the phone, so it also works
+  /// with no signal; asks the server only if the phone does not have it.
+  Future<Map<String, dynamic>?> _read(String orderId) async {
+    final doc = _orders.doc(orderId);
+    try {
+      final cached = await doc.get(const GetOptions(source: Source.cache));
+      if (cached.exists) return cached.data();
+    } on FirebaseException {
+      // Not on the phone yet.
+    }
+    return (await doc.get()).data();
+  }
+
   @override
   Stream<List<DeliveryOrder>> watchOrders() {
     if (riderPhone.isEmpty) return Stream.value(const []);
@@ -37,31 +58,55 @@ class FirestoreDeliveryRepository implements DeliveryRepository {
   }
 
   @override
-  Future<void> accept(String orderId) =>
-      _orders.doc(orderId).update({'status': DeliveryStatus.accepted.name});
+  Future<void> accept(String orderId) => _send(
+        _orders.doc(orderId).update({
+          'status': DeliveryStatus.accepted.name,
+          // Starts the clock for picking the order up from the store.
+          'acceptedAt': DateTime.now().millisecondsSinceEpoch,
+        }),
+      );
 
-  /// Clears the assignment so the admin can give the order to someone else.
+  /// Clears the assignment so the admin can give the order to someone
+  /// else, and leaves the rider's reason on the order for the admin.
   @override
-  Future<void> reject(String orderId) => _orders.doc(orderId).update({
+  Future<void> reject(String orderId, String reason) async {
+    final riderName = (await _read(orderId))?['riderName'];
+    await _send(
+      _orders.doc(orderId).update({
         'riderId': null,
         'riderName': null,
         'riderPhone': null,
-      });
+        'assignedAt': null,
+        'rejectReason': reason,
+        'rejectedByName': riderName is String ? riderName : '',
+        'rejectedAt': DateTime.now().millisecondsSinceEpoch,
+      }),
+    );
+  }
 
   @override
-  Future<void> confirmPickup(String orderId) =>
-      _orders.doc(orderId).update({'status': DeliveryStatus.pickedUp.name});
+  Future<void> confirmPickup(String orderId) => _send(
+        _orders.doc(orderId).update({'status': DeliveryStatus.pickedUp.name}),
+      );
 
   @override
-  Future<void> markDelivered(String orderId) async {
-    final doc = await _orders.doc(orderId).get();
-    final cash = doc.data()?['paymentMethod'] == 'cod';
-    await _orders.doc(orderId).update({
-      'status': DeliveryStatus.delivered.name,
-      'deliveredAt': DateTime.now().millisecondsSinceEpoch,
-      // Cash is collected at the door, so a COD order is paid on delivery.
-      if (cash) 'paymentStatus': 'paid',
-    });
+  Future<void> markDelivered(
+    String orderId, {
+    required String photoUrl,
+    DateTime? deliveredAt,
+  }) async {
+    final cash = (await _read(orderId))?['paymentMethod'] == 'cod';
+    await _send(
+      _orders.doc(orderId).update({
+        'status': DeliveryStatus.delivered.name,
+        'deliveredAt':
+            (deliveredAt ?? DateTime.now()).millisecondsSinceEpoch,
+        // Proof of handover, shown to the admin on the order.
+        'deliveryPhotoUrl': photoUrl,
+        // Cash is collected at the door, so a COD order is paid on delivery.
+        if (cash) 'paymentStatus': 'paid',
+      }),
+    );
   }
 
   /// Maps an `orders/{id}` document to what the rider needs.
@@ -104,6 +149,13 @@ class FirestoreDeliveryRepository implements DeliveryRepository {
       // yet; 0 hides the distance on screen.
       distanceKm: 0,
       deliveredAt: time('deliveredAt'),
+      assignedAt: time('assignedAt'),
+      acceptedAt: time('acceptedAt'),
+      rating: (map['riderRating'] as num?)?.toInt(),
+      cashHandedOver: map['cashHandedOver'] as bool? ?? false,
+      // The customer's own pin for the address, when they shared one.
+      latitude: (address['lat'] as num?)?.toDouble(),
+      longitude: (address['lng'] as num?)?.toDouble(),
     );
   }
 }

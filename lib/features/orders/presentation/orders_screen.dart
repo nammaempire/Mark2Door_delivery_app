@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +12,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/async_value_view.dart';
 import '../../auth/application/auth_providers.dart';
 import '../application/delivery_providers.dart';
+import '../application/pending_deliveries.dart';
 import '../domain/delivery_order.dart';
 import 'order_widgets.dart';
 
@@ -26,12 +29,16 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   /// Ids with an accept/reject in flight, to block double taps.
   final _busy = <String>{};
 
-  Future<void> _respond(DeliveryOrder order, {required bool accept}) async {
+  Future<void> _respond(
+    DeliveryOrder order, {
+    required bool accept,
+    String reason = '',
+  }) async {
     if (_busy.contains(order.id)) return;
     setState(() => _busy.add(order.id));
     final repo = ref.read(deliveryRepositoryProvider);
     try {
-      await (accept ? repo.accept(order.id) : repo.reject(order.id));
+      await (accept ? repo.accept(order.id) : repo.reject(order.id, reason));
       if (!mounted) return;
       if (accept) setState(() => _showActive = true);
       ScaffoldMessenger.of(context)
@@ -56,27 +63,11 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   }
 
   Future<void> _confirmReject(DeliveryOrder order) async {
-    final ok = await showDialog<bool>(
+    final reason = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Reject ${order.displayId}?'),
-        content: const Text(
-          'The order goes back to the store to be given to another partner.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Keep'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-            child: const Text('Reject'),
-          ),
-        ],
-      ),
+      builder: (context) => _RejectDialog(order: order),
     );
-    if (ok ?? false) await _respond(order, accept: false);
+    if (reason != null) await _respond(order, accept: false, reason: reason);
   }
 
   @override
@@ -89,7 +80,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       child: Scaffold(
         body: AsyncValueView(
           value: orders,
-          onRetry: () => ref.invalidate(ordersProvider),
+          onRetry: () => ref.invalidate(serverOrdersProvider),
           data: (all) {
             final fresh = all.where((o) => o.isNew).toList();
             final active = all.where((o) => o.isActive).toList();
@@ -98,6 +89,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             return Column(
               children: [
                 _Header(stats: DayStats.forDay(all, DateTime.now())),
+                const _WaitingToSend(),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                   child: _Tabs(
@@ -163,6 +155,10 @@ class _Header extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final onDuty = ref.watch(onDutyProvider);
     final phone = ref.watch(currentUserProvider)?.phone ?? '';
+    // Greets the rider by the first name the store registered them with.
+    final name = ref.watch(riderProfileProvider).valueOrNull?.name.trim() ?? '';
+    final firstName =
+        name.isEmpty ? 'partner' : name.split(RegExp(r'\s+')).first;
     final topInset = MediaQuery.paddingOf(context).top;
 
     Widget stat(String label, String value, IconData icon) {
@@ -229,9 +225,12 @@ class _Header extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Hello, partner',
-                      style: TextStyle(
+                    Text(
+                      'Hello, $firstName',
+                      key: const ValueKey('greeting'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 22,
                         fontWeight: FontWeight.w800,
@@ -374,93 +373,322 @@ class _OrderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final pickedUp = order.status == DeliveryStatus.pickedUp;
 
-    return SoftCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Order ${order.displayId}',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textDark,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Flexible(child: PaymentPill(order: order)),
-            ],
-          ),
-          if (order.isActive) ...[
-            const SizedBox(height: 8),
-            Pill(
-              pickedUp ? 'On the way to customer' : 'Go to store for pickup',
-              pickedUp ? const Color(0xFF4B2FCB) : const Color(0xFF155FCB),
-              icon: pickedUp
-                  ? Icons.delivery_dining_rounded
-                  : Icons.storefront_rounded,
-            ),
-          ],
-          const SizedBox(height: 14),
-          RouteSummary(order: order),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(),
-          ),
-          OrderFacts(order: order),
-          const SizedBox(height: 14),
-          if (order.isNew)
+    return _UrgentFrame(
+      order: order,
+      builder: (context, urgent) => SoftCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton(
-                    key: ValueKey('reject-${order.id}'),
-                    onPressed: busy ? null : onReject,
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
-                      foregroundColor: AppColors.danger,
+                  child: Text(
+                    'Order ${order.displayId}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textDark,
                     ),
-                    child: const Text('Reject'),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: FilledButton(
-                    key: ValueKey('accept-${order.id}'),
-                    onPressed: busy ? null : onAccept,
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
-                    ),
-                    child: Text(busy ? 'Please wait…' : 'Accept order'),
-                  ),
-                ),
+                const SizedBox(width: 8),
+                Flexible(child: PaymentPill(order: order)),
               ],
-            )
-          else
-            FilledButton.icon(
-              key: ValueKey('continue-${order.id}'),
-              onPressed: () {
-                // A lingering "accepted" message would cover the next
-                // page's bottom button.
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                context.push(
-                  pickedUp
-                      ? Routes.deliver(order.id)
-                      : Routes.pickup(order.id),
-                );
-              },
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-              ),
-              icon: Icon(
-                pickedUp ? Icons.navigation_rounded : Icons.checklist_rounded,
-              ),
-              label: Text(pickedUp ? 'Continue delivery' : 'Start pickup'),
             ),
+            if (urgent) ...[
+              const SizedBox(height: 8),
+              Pill(
+                '${order.isNew ? 'Urgent' : 'Pick up now'} · waiting '
+                '${DateTime.now().difference(order.waitingSince).inMinutes} min',
+                AppColors.danger,
+                key: ValueKey('urgent-${order.id}'),
+                icon: Icons.priority_high_rounded,
+              ),
+            ],
+            if (order.isActive) ...[
+              const SizedBox(height: 8),
+              Pill(
+                pickedUp ? 'On the way to customer' : 'Go to store for pickup',
+                pickedUp ? const Color(0xFF4B2FCB) : const Color(0xFF155FCB),
+                icon: pickedUp
+                    ? Icons.delivery_dining_rounded
+                    : Icons.storefront_rounded,
+              ),
+            ],
+            const SizedBox(height: 14),
+            RouteSummary(order: order),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Divider(),
+            ),
+            OrderFacts(order: order),
+            const SizedBox(height: 14),
+            if (order.isNew)
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      key: ValueKey('reject-${order.id}'),
+                      onPressed: busy ? null : onReject,
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        foregroundColor: AppColors.danger,
+                      ),
+                      child: const Text('Reject'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton(
+                      key: ValueKey('accept-${order.id}'),
+                      onPressed: busy ? null : onAccept,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                      ),
+                      child: Text(busy ? 'Please wait…' : 'Accept order'),
+                    ),
+                  ),
+                ],
+              )
+            else
+              FilledButton.icon(
+                key: ValueKey('continue-${order.id}'),
+                onPressed: () {
+                  // A lingering "accepted" message would cover the next
+                  // page's bottom button.
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                  context.push(
+                    pickedUp
+                        ? Routes.deliver(order.id)
+                        : Routes.pickup(order.id),
+                  );
+                },
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                icon: Icon(
+                  pickedUp ? Icons.navigation_rounded : Icons.checklist_rounded,
+                ),
+                label: Text(pickedUp ? 'Continue delivery' : 'Start pickup'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Wraps a new order's card. Once the order has waited
+/// [DeliveryOrder.urgentAfter] without being accepted, the card gets a red
+/// border that blinks until the rider accepts or rejects it.
+class _UrgentFrame extends StatefulWidget {
+  const _UrgentFrame({required this.order, required this.builder});
+
+  final DeliveryOrder order;
+  final Widget Function(BuildContext context, bool urgent) builder;
+
+  @override
+  State<_UrgentFrame> createState() => _UrgentFrameState();
+}
+
+class _UrgentFrameState extends State<_UrgentFrame>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _blink = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 600),
+  );
+  Timer? _clock;
+  bool _urgent = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+    // Re-checked on a timer so the card turns urgent while it is on screen
+    // and the waiting time stays current.
+    _clock = Timer.periodic(const Duration(seconds: 10), (_) => _check());
+  }
+
+  @override
+  void didUpdateWidget(_UrgentFrame oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _check();
+  }
+
+  void _check() {
+    final urgent = widget.order.isUrgentAt(DateTime.now());
+    if (urgent && !_blink.isAnimating) {
+      _blink.repeat(reverse: true);
+    } else if (!urgent && _blink.isAnimating) {
+      _blink
+        ..stop()
+        ..value = 0;
+    }
+    if (mounted) setState(() => _urgent = urgent);
+  }
+
+  @override
+  void dispose() {
+    _clock?.cancel();
+    _blink.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final card = widget.builder(context, _urgent);
+    if (!_urgent) return card;
+    return AnimatedBuilder(
+      animation: _blink,
+      child: card,
+      builder: (context, child) => DecoratedBox(
+        key: ValueKey('urgent-frame-${widget.order.id}'),
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            // Fades between a faint and a solid red.
+            color:
+                AppColors.danger.withValues(alpha: 0.25 + 0.75 * _blink.value),
+            width: 2.5,
+          ),
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+/// Asks the rider why they are rejecting an order. The reason is required
+/// and is shown to the admin in the admin web.
+class _RejectDialog extends StatefulWidget {
+  const _RejectDialog({required this.order});
+
+  final DeliveryOrder order;
+
+  @override
+  State<_RejectDialog> createState() => _RejectDialogState();
+}
+
+class _RejectDialogState extends State<_RejectDialog> {
+  static const _quickReasons = [
+    'Vehicle problem',
+    'Too far away',
+    'Busy with another order',
+    'Not available now',
+  ];
+
+  final _reason = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _reason.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = _reason.text.trim();
+    return AlertDialog(
+      title: Text('Reject ${widget.order.displayId}?'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Tell the store why. The order goes back to the store to be '
+              'given to another partner.',
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final r in _quickReasons)
+                  ChoiceChip(
+                    label: Text(r),
+                    selected: text == r,
+                    onSelected: (_) => _reason.text = r,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('reject-reason-field'),
+              controller: _reason,
+              maxLength: 150,
+              minLines: 2,
+              maxLines: 3,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                hintText: 'Reason for rejecting',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Keep'),
+        ),
+        TextButton(
+          key: const ValueKey('confirm-reject-button'),
+          // A reason is required before the order can be rejected.
+          onPressed:
+              text.length < 3 ? null : () => Navigator.of(context).pop(text),
+          style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+          child: const Text('Reject'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Shown while deliveries finished without signal are still on the phone.
+/// They are sent by themselves; "Send now" is for a rider who has just
+/// come back online and does not want to wait.
+class _WaitingToSend extends ConsumerWidget {
+  const _WaitingToSend();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count = ref.watch(pendingDeliveriesProvider).length;
+    if (count == 0) return const SizedBox.shrink();
+    return Container(
+      key: const ValueKey('pending-sync-banner'),
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withAlpha(30),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.warning.withAlpha(90)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off_rounded, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '$count ${count == 1 ? 'delivery is' : 'deliveries are'} saved '
+              'on this phone and will be sent when you have signal.',
+              style: const TextStyle(fontSize: 13, height: 1.3),
+            ),
+          ),
+          TextButton(
+            key: const ValueKey('send-now-button'),
+            onPressed: () =>
+                ref.read(pendingDeliveriesProvider.notifier).sync(),
+            child: const Text('Send now'),
+          ),
         ],
       ),
     );

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/application/auth_providers.dart';
+import '../application/pending_deliveries.dart';
 
 /// Bottom-navigation scaffold; each tab keeps its own navigation state.
 ///
@@ -18,6 +19,10 @@ class HomeShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final rider = ref.watch(riderProfileProvider);
+    // Keeps this phone registered for new-order notifications.
+    ref.watch(pushRegistrationProvider);
+    // Starts sending any delivery that was finished without signal.
+    ref.watch(pendingDeliveriesProvider);
     // `hasValue` with null data means the lookup finished and found nobody.
     if (rider.hasValue && rider.value == null) return const _NotRegistered();
 

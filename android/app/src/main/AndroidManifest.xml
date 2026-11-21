@@ -1,5 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Shows the rider's position on the delivery map. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- New-order notifications (asked at runtime on Android 13 and later). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Lets the app hand off to the dialer and Google Maps (Android 11+). -->
     <queries>
         <intent>
@@ -37,6 +42,16 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Notifications without a channel use the New orders one. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="new_orders_v2" />
+        <!-- Google Maps key for the delivery map. Replace the value with the
+             key from Google Cloud (Maps SDK for Android). Until then the map
+             area is blank; the rest of the app works. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyCymr7ki8mDO_vDLKm2jLtpqcjHIFWEuDA" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

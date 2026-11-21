@@ -33,23 +33,45 @@ class FakeDeliveryRepository implements DeliveryRepository {
 
   @override
   Future<void> accept(String orderId) =>
-      _update(orderId, (o) => o.copyWith(status: DeliveryStatus.accepted));
+      _update(
+        orderId,
+        (o) => o.copyWith(
+          status: DeliveryStatus.accepted,
+          acceptedAt: DateTime.now(),
+        ),
+      );
+
+  /// Reasons given for rejected orders, by order id.
+  final rejections = <String, String>{};
 
   @override
-  Future<void> reject(String orderId) => _update(orderId, (_) => null);
+  Future<void> reject(String orderId, String reason) {
+    rejections[orderId] = reason;
+    return _update(orderId, (_) => null);
+  }
 
   @override
   Future<void> confirmPickup(String orderId) =>
       _update(orderId, (o) => o.copyWith(status: DeliveryStatus.pickedUp));
 
+  /// Delivery photos handed in, by order id.
+  final proofPhotos = <String, String>{};
+
   @override
-  Future<void> markDelivered(String orderId) => _update(
-        orderId,
-        (o) => o.copyWith(
-          status: DeliveryStatus.delivered,
-          deliveredAt: DateTime.now(),
-        ),
-      );
+  Future<void> markDelivered(
+    String orderId, {
+    required String photoUrl,
+    DateTime? deliveredAt,
+  }) {
+    proofPhotos[orderId] = photoUrl;
+    return _update(
+      orderId,
+      (o) => o.copyWith(
+        status: DeliveryStatus.delivered,
+        deliveredAt: deliveredAt ?? DateTime.now(),
+      ),
+    );
+  }
 
   static List<DeliveryOrder> _seed(DateTime now) {
     DeliveryOrder order(
@@ -66,6 +88,7 @@ class FakeDeliveryRepository implements DeliveryRepository {
       double km,
       List<DeliveryItem> items, {
       int? deliveredMinutesAgo,
+      int? rating,
     }) {
       final placed = now.subtract(Duration(minutes: minutesAgo));
       return DeliveryOrder(
@@ -80,11 +103,18 @@ class FakeDeliveryRepository implements DeliveryRepository {
         pincode: pincode,
         status: status,
         createdAt: placed,
+        // Sample orders count as just assigned, so they turn urgent after
+        // five minutes on screen.
+        assignedAt: now,
         etaAt: placed.add(const Duration(minutes: 30)),
         distanceKm: km,
         deliveredAt: deliveredMinutesAgo == null
             ? null
             : now.subtract(Duration(minutes: deliveredMinutesAgo)),
+        rating: rating,
+        // Cash from before today has already been handed to the store.
+        cashHandedOver:
+            deliveredMinutesAgo != null && deliveredMinutesAgo > 1000,
       );
     }
 
@@ -109,20 +139,20 @@ class FakeDeliveryRepository implements DeliveryRepository {
           '560102', 3.1, const [banana, milk]),
       order('M2D2035', DeliveryStatus.delivered, 95, 28400, true, 'Imran Khan',
           '9880456123', '3, Residency Road', '', '560001', 5.4,
-          const [atta, eggs], deliveredMinutesAgo: 68),
+          const [atta, eggs], deliveredMinutesAgo: 68, rating: 5),
       order('M2D2031', DeliveryStatus.delivered, 170, 17800, false,
           'Divya Nair', '9538011223', '45, Hosur Main Road, Bommanahalli', '',
           '560068', 4.0, const [oil, chips], deliveredMinutesAgo: 141),
       order('M2D2027', DeliveryStatus.delivered, 260, 7200, true,
           'Karthik Gowda', '9620334455', '18, 80 Feet Road, Koramangala', '',
-          '560034', 0.8, const [tomato, banana], deliveredMinutesAgo: 236),
+          '560034', 0.8, const [tomato, banana], deliveredMinutesAgo: 236, rating: 4),
       order('M2D1998', DeliveryStatus.delivered, 1500, 52900, true,
           'Ananya Rao', '9845012345', '14, 2nd Main, Koramangala 4th Block', '',
           '560034', 1.2, const [atta, oil, tea, milk],
-          deliveredMinutesAgo: 1472),
+          deliveredMinutesAgo: 1472, rating: 5),
       order('M2D1993', DeliveryStatus.delivered, 1620, 11400, false,
           'Meera Iyer', '9741098765', '221, 5th Cross, HSR Layout Sector 2', '',
-          '560102', 3.1, const [chips, eggs], deliveredMinutesAgo: 1590),
+          '560102', 3.1, const [chips, eggs], deliveredMinutesAgo: 1590, rating: 4),
     ];
   }
 }

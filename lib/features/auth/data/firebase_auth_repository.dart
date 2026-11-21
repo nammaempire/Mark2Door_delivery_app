@@ -75,6 +75,29 @@ class FirebaseAuthRepository implements AuthRepository {
   @override
   Future<void> signOut() => _auth.signOut();
 
+  /// Firebase refuses to delete an account unless the user signed in
+  /// recently; four minutes keeps us inside its limit.
+  @override
+  bool get signedInRecently {
+    final last = _auth.currentUser?.metadata.lastSignInTime;
+    return last != null &&
+        DateTime.now().difference(last) < const Duration(minutes: 4);
+  }
+
+  @override
+  Future<void> deleteAccount() async {
+    try {
+      await _auth.currentUser?.delete();
+    } on FirebaseAuthException catch (e) {
+      throw AuthFailure(switch (e.code) {
+        'requires-recent-login' =>
+          'Confirm the OTP again to delete your account.',
+        'network-request-failed' => 'No internet connection.',
+        _ => 'Could not delete your account. Try again.',
+      });
+    }
+  }
+
   static String _message(FirebaseAuthException e) {
     switch (e.code) {
       case 'invalid-phone-number':

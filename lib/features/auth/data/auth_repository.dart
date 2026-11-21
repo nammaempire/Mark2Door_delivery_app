@@ -17,4 +17,12 @@ abstract interface class AuthRepository {
   });
 
   Future<void> signOut();
+
+  /// True when the OTP was confirmed in the last few minutes. Deleting an
+  /// account is only allowed then, so the app asks for a fresh OTP first.
+  bool get signedInRecently;
+
+  /// Permanently removes the login and signs out. Needs
+  /// [signedInRecently]; throws [AuthFailure] with a user-facing message.
+  Future<void> deleteAccount();
 }

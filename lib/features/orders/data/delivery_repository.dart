@@ -6,10 +6,17 @@ abstract interface class DeliveryRepository {
 
   Future<void> accept(String orderId);
 
-  /// Hands the order back so the admin can assign someone else.
-  Future<void> reject(String orderId);
+  /// Hands the order back so the admin can assign someone else. [reason]
+  /// is the rider's explanation, shown to the admin.
+  Future<void> reject(String orderId, String reason);
 
   Future<void> confirmPickup(String orderId);
 
-  Future<void> markDelivered(String orderId);
+  /// [deliveredAt] is when the order was handed over; it is earlier than
+  /// now when the rider had no signal and the update is sent later.
+  Future<void> markDelivered(
+    String orderId, {
+    required String photoUrl,
+    DateTime? deliveredAt,
+  });
 }

@@ -5,7 +5,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/brand_logo.dart';
+import '../../../core/widgets/m2d_mark.dart';
+
+/// The two colours of the logo artwork.
+const _logoMaroon = Color(0xFF5D011A);
+const _logoGold = Color(0xFFDDA10D);
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -45,16 +49,12 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    // White, like the native launch screen that shows before Flutter
+    // starts, so the logo stays in place while the app loads.
     return Scaffold(
-      body: Container(
+      backgroundColor: Colors.white,
+      body: SizedBox(
         width: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [AppColors.primary, AppColors.primaryDark],
-          ),
-        ),
         child: SafeArea(
           child: Column(
             children: [
@@ -63,16 +63,35 @@ class _SplashScreenState extends State<SplashScreen>
                 opacity: _fade,
                 child: ScaleTransition(
                   scale: _scale,
-                  child: const BrandLogo(size: 104),
+                  child: const M2dMark(width: 200),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 22),
+              FadeTransition(
+                opacity: _fade,
+                child: const Text.rich(
+                  TextSpan(
+                    style: TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
+                      color: _logoMaroon,
+                    ),
+                    children: [
+                      TextSpan(text: 'mart'),
+                      TextSpan(text: '2', style: TextStyle(color: _logoGold)),
+                      TextSpan(text: 'door'),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
               FadeTransition(
                 opacity: _fade,
                 child: const Text(
                   'Delivery partner',
                   style: TextStyle(
-                    color: Color(0xCCFFFFFF),
+                    color: AppColors.textMuted,
                     fontSize: 14,
                     letterSpacing: 0.2,
                   ),
@@ -84,7 +103,7 @@ class _SplashScreenState extends State<SplashScreen>
                 height: 26,
                 child: CircularProgressIndicator(
                   strokeWidth: 2.4,
-                  color: Colors.white,
+                  color: _logoMaroon,
                 ),
               ),
               const SizedBox(height: 40),

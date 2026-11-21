@@ -16,6 +16,7 @@ class FakeAuthRepository implements AuthRepository {
   final LocalStore _store;
   final _controller = StreamController<AppUser?>.broadcast();
   AppUser? _user;
+  DateTime? _verifiedAt;
 
   @override
   AppUser? get currentUser => _user;
@@ -43,6 +44,7 @@ class FakeAuthRepository implements AuthRepository {
     }
     final user = AppUser(uid: 'demo-$verificationId', phone: verificationId);
     _user = user;
+    _verifiedAt = DateTime.now();
     await _store.writeString(LocalStore.demoSessionKey, user.phone);
     _controller.add(user);
     return user;
@@ -53,5 +55,16 @@ class FakeAuthRepository implements AuthRepository {
     _user = null;
     await _store.writeString(LocalStore.demoSessionKey, null);
     _controller.add(null);
+  }
+
+  @override
+  bool get signedInRecently =>
+      _verifiedAt != null &&
+      DateTime.now().difference(_verifiedAt!) < const Duration(minutes: 4);
+
+  @override
+  Future<void> deleteAccount() async {
+    _verifiedAt = null;
+    await signOut();
   }
 }

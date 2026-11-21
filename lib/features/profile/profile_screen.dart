@@ -8,6 +8,7 @@ import '../auth/application/auth_providers.dart';
 import '../auth/presentation/auth_header.dart';
 import '../orders/application/delivery_providers.dart';
 import '../orders/presentation/order_widgets.dart';
+import 'delete_account.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -31,7 +32,17 @@ class ProfileScreen extends ConsumerWidget {
       ),
     );
     if (confirmed ?? false) {
-      // The router redirect sends the rider to login once the session ends.
+      // Stop new-order alerts to this phone, then end the session. The
+      // router redirect sends the rider to login once it ends.
+      final phone = ref.read(riderPhoneProvider).valueOrNull ?? '';
+      try {
+        await ref
+            .read(pushServiceProvider)
+            .unregister(phone)
+            .timeout(const Duration(seconds: 5));
+      } on Exception {
+        // Offline: logging out still goes ahead.
+      }
       await ref.read(authRepositoryProvider).signOut();
     }
   }
@@ -41,6 +52,12 @@ class ProfileScreen extends ConsumerWidget {
     final store = ref.watch(storeInfoProvider);
     final user = ref.watch(currentUserProvider);
     final onDuty = ref.watch(onDutyProvider);
+    // The name the admin entered for this rider under Riders.
+    final riderName =
+        ref.watch(riderProfileProvider).valueOrNull?.name.trim() ?? '';
+    final rating = RatingSummary.of(
+      ref.watch(ordersProvider).valueOrNull ?? const [],
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
@@ -64,9 +81,10 @@ class ProfileScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Delivery partner',
-                        style: TextStyle(
+                      Text(
+                        riderName.isEmpty ? 'Delivery partner' : riderName,
+                        key: const ValueKey('profile-name'),
+                        style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w800,
                           color: AppColors.textDark,
@@ -75,6 +93,32 @@ class ProfileScreen extends ConsumerWidget {
                       Text(
                         user?.phone ?? '',
                         style: const TextStyle(color: AppColors.textMuted),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.star_rounded,
+                            size: 20,
+                            color: Color(0xFFE8A200),
+                          ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              rating.count == 0
+                                  ? 'No ratings yet'
+                                  : '${rating.label} · ${rating.count} '
+                                      'rating${rating.count == 1 ? '' : 's'}',
+                              key: const ValueKey('profile-rating'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textDark,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -125,6 +169,17 @@ class ProfileScreen extends ConsumerWidget {
                 ),
               ),
               onTap: () => _confirmLogout(context, ref),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Center(
+            child: TextButton(
+              key: const ValueKey('delete-account-button'),
+              onPressed: () => deleteRiderAccount(context),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.textMuted,
+              ),
+              child: const Text('Delete account'),
             ),
           ),
           if (!Env.useFirebase) ...[
