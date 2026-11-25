@@ -15,7 +15,11 @@ class RiderProfile {
 /// Where riders pick orders up; managed in the admin web (`settings/store`).
 @immutable
 class StoreInfo {
-  const StoreInfo({required this.name, required this.address});
+  const StoreInfo({
+    required this.name,
+    required this.address,
+    this.paymentQrUrl = '',
+  });
 
   static const unknown = StoreInfo(
     name: 'mart2door Store',
@@ -24,6 +28,10 @@ class StoreInfo {
 
   final String name;
   final String address;
+
+  /// Picture of the store's UPI QR code, shown to a customer who wants to
+  /// pay a cash order by scanning. Empty until the store adds it.
+  final String paymentQrUrl;
 }
 
 abstract interface class RiderRepository {
@@ -47,6 +55,7 @@ class FakeRiderRepository implements RiderRepository {
   static const store = StoreInfo(
     name: 'mart2door Store',
     address: '80 Feet Road, Koramangala 4th Block, Bengaluru 560034',
+    paymentQrUrl: 'https://example.com/mart2door-upi-qr.png',
   );
 
   @override
@@ -100,6 +109,7 @@ class FirestoreRiderRepository implements RiderRepository {
         return StoreInfo(
           name: name.isEmpty ? StoreInfo.unknown.name : name,
           address: address.isEmpty ? StoreInfo.unknown.address : address,
+          paymentQrUrl: (data['paymentQrUrl'] as String? ?? '').trim(),
         );
       });
 

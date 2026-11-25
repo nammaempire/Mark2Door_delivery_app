@@ -15,6 +15,13 @@ class DeliveryApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       routerConfig: ref.watch(routerProvider),
+      // Follows the phone's font size setting, within limits the screens
+      // are built for.
+      builder: (context, child) => MediaQuery.withClampedTextScaling(
+        minScaleFactor: 0.9,
+        maxScaleFactor: 1.2,
+        child: child ?? const SizedBox.shrink(),
+      ),
     );
   }
 }

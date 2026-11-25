@@ -1,3 +1,5 @@
+import '../../profile/rider_documents.dart';
+import '../../profile/rider_documents_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -25,6 +27,14 @@ class HomeShell extends ConsumerWidget {
     ref.watch(pendingDeliveriesProvider);
     // `hasValue` with null data means the lookup finished and found nobody.
     if (rider.hasValue && rider.value == null) return const _NotRegistered();
+    // A registered rider who has not sent their documents yet does that
+    // first. If the check itself fails (no signal), they are let in.
+    final documents = ref.watch(riderDocumentsProvider);
+    if (rider.valueOrNull != null &&
+        documents.hasValue &&
+        documents.value == null) {
+      return const RiderDocumentsScreen();
+    }
 
     return Scaffold(
       body: shell,

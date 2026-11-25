@@ -13,6 +13,7 @@ import '../application/delivery_providers.dart';
 import '../application/pending_deliveries.dart';
 import '../domain/delivery_order.dart';
 import 'order_widgets.dart';
+import 'qr_payment_sheet.dart';
 import 'live_route_map.dart';
 import 'route_map.dart';
 
@@ -183,6 +184,21 @@ class _DeliveryScreenState extends ConsumerState<DeliveryScreen> {
                     ),
                     const SizedBox(height: 14),
                     _CashCard(order: o),
+                    if (o.collectsCash && o.status == DeliveryStatus.pickedUp)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: OutlinedButton.icon(
+                          key: const ValueKey('qr-pay-button'),
+                          onPressed: () => showModalBottomSheet<void>(
+                            context: context,
+                            isScrollControlled: true,
+                            showDragHandle: true,
+                            builder: (_) => QrPaymentSheet(order: o),
+                          ),
+                          icon: const Icon(Icons.qr_code_2_rounded),
+                          label: const Text('Customer wants to pay by QR scan'),
+                        ),
+                      ),
                     const SizedBox(height: 14),
                     SoftCard(
                       padding: EdgeInsets.zero,
@@ -255,7 +271,7 @@ class _CashCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cod = order.cashOnDelivery;
+    final cod = order.collectsCash;
     final colors = cod
         ? const [Color(0xFFFFA94D), Color(0xFFF2600C)]
         // Paid: success green, not the brand colour.
@@ -286,7 +302,11 @@ class _CashCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  cod ? 'Collect cash from customer' : 'Already paid online',
+                  cod
+                      ? 'Collect cash from customer'
+                      : order.paidByQr
+                          ? 'Paid by QR scan'
+                          : 'Already paid online',
                   style: const TextStyle(
                     color: Color(0xF2FFFFFF),
                     fontSize: 13,
@@ -355,7 +375,7 @@ class _ConfirmSheetState extends ConsumerState<_ConfirmSheet> {
   Widget build(BuildContext context) {
     final order = widget.order;
     final hasPhoto = _photoPath != null;
-    final ready = hasPhoto && (!order.cashOnDelivery || _cashCollected);
+    final ready = hasPhoto && (!order.collectsCash || _cashCollected);
 
     return SafeArea(
       child: Padding(
@@ -414,7 +434,7 @@ class _ConfirmSheetState extends ConsumerState<_ConfirmSheet> {
                     : AppColors.danger,
               ),
             ),
-            if (order.cashOnDelivery) ...[
+            if (order.collectsCash) ...[
               const SizedBox(height: 8),
               CheckboxListTile(
                 key: const ValueKey('cash-collected-checkbox'),
@@ -487,7 +507,7 @@ class _DeliveredDialog extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            order.cashOnDelivery
+            order.collectsCash
                 ? 'Order ${order.displayId} is complete. '
                     '${formatPaise(order.totalPaise)} cash added to today\'s '
                     'collection.'

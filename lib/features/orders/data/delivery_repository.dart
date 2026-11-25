@@ -19,4 +19,9 @@ abstract interface class DeliveryRepository {
     required String photoUrl,
     DateTime? deliveredAt,
   });
+
+  /// Records that the customer of a cash order paid by scanning the
+  /// store's QR. [proofUrl] is the rider's photo of the customer's
+  /// "payment successful" screen, kept as proof for the store.
+  Future<void> recordQrPayment(String orderId, {required String proofUrl});
 }

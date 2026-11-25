@@ -73,6 +73,15 @@ class FakeDeliveryRepository implements DeliveryRepository {
     );
   }
 
+  /// Proof photos of QR payments, by order.
+  final qrProofs = <String, String>{};
+
+  @override
+  Future<void> recordQrPayment(String orderId, {required String proofUrl}) {
+    qrProofs[orderId] = proofUrl;
+    return _update(orderId, (o) => o.copyWith(paidByQr: true));
+  }
+
   static List<DeliveryOrder> _seed(DateTime now) {
     DeliveryOrder order(
       String id,

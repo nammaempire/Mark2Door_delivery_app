@@ -90,7 +90,7 @@ class PaymentPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return order.cashOnDelivery
+    return order.collectsCash
         ? Pill(
             'Collect ${formatPaise(order.totalPaise)}',
             AppColors.accentDark,

@@ -13,6 +13,8 @@ import 'package:mart2door_delivery/features/orders/domain/delivery_order.dart';
 import 'package:mart2door_delivery/features/orders/presentation/delivery_screen.dart';
 import 'package:mart2door_delivery/features/orders/presentation/orders_screen.dart';
 import 'package:mart2door_delivery/features/orders/presentation/pickup_screen.dart';
+import 'package:mart2door_delivery/features/profile/rider_documents.dart';
+import 'package:mart2door_delivery/features/profile/rider_documents_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// End-to-end journeys against the sample-data repositories.
@@ -37,6 +39,14 @@ Future<void> _pumpApp(WidgetTester tester, {bool signedIn = true}) async {
 
 Future<void> _tapKey(WidgetTester tester, String key) async {
   final finder = find.byKey(ValueKey(key));
+  // Rows far down a long page are built only once scrolled near.
+  if (finder.evaluate().isEmpty) {
+    await tester.scrollUntilVisible(
+      finder,
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+  }
   await tester.ensureVisible(finder);
   await tester.pumpAndSettle();
   await tester.tap(finder);
@@ -122,6 +132,149 @@ void main() {
 
     expect(find.byType(OrdersScreen), findsOneWidget);
     expect(find.text('Active (1)'), findsOneWidget);
+  });
+
+  testWidgets('a cash order paid by QR scan needs a proof photo, and then no '
+      'cash is collected', (tester) async {
+    await _pumpApp(tester);
+    await _tapKey(tester, 'accept-M2D2041');
+    await _tapKey(tester, 'continue-M2D2041');
+    for (var i = 0; i < 3; i++) {
+      await _tapKey(tester, 'item-$i');
+    }
+    await _tapKey(tester, 'confirm-pickup-button');
+    expect(find.text('Collect cash from customer'), findsOneWidget);
+
+    await _tapKey(tester, 'qr-pay-button');
+    expect(find.byKey(const ValueKey('store-qr')), findsOneWidget);
+    // No proof photo, no confirmation.
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('qr-confirm-button')),
+          )
+          .onPressed,
+      isNull,
+    );
+    await _tapKey(tester, 'qr-proof-button');
+    expect(find.text('Photo taken. Tap to retake'), findsOneWidget);
+    await _tapKey(tester, 'qr-confirm-button');
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(DeliveryApp)),
+    );
+    final repo =
+        container.read(deliveryRepositoryProvider) as FakeDeliveryRepository;
+    expect(repo.qrProofs['M2D2041'], isNotNull);
+    final order = container
+        .read(ordersProvider)
+        .requireValue
+        .firstWhere((o) => o.id == 'M2D2041');
+    expect(order.paidByQr, isTrue);
+    expect(order.collectsCash, isFalse);
+    expect(order.cashToCollectPaise, 0);
+
+    // The screen now says it is paid, and delivery asks only for a photo.
+    expect(find.text('Paid by QR scan'), findsOneWidget);
+    expect(find.byKey(const ValueKey('qr-pay-button')), findsNothing);
+    await tester.pump(const Duration(seconds: 5)); // snackbar goes away
+    await tester.pumpAndSettle();
+    await _tapKey(tester, 'mark-delivered-button');
+    expect(
+      find.byKey(const ValueKey('cash-collected-checkbox')),
+      findsNothing,
+    );
+    await tester.tap(find.byKey(const ValueKey('take-photo-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-delivered-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Delivered'), findsOneWidget);
+  });
+
+  testWidgets('a new rider submits documents before seeing orders', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues(
+      {LocalStore.demoSessionKey: '+919900011111'},
+    );
+    final prefs = await SharedPreferences.getInstance();
+    final documents = FakeRiderDocumentsRepository(submitted: false);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          riderDocumentsRepositoryProvider.overrideWithValue(documents),
+        ],
+        child: const DeliveryApp(),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+
+    // No orders yet: the documents form comes first.
+    expect(find.byType(RiderDocumentsScreen), findsOneWidget);
+    expect(find.byType(OrdersScreen), findsNothing);
+
+    // Nothing filled in: it does not go through.
+    await _tapKey(tester, 'submit-documents-button');
+    expect(find.text('Enter your full permanent address'), findsOneWidget);
+    expect(find.text('Enter the 12-digit Aadhaar number'), findsOneWidget);
+    expect(await documents.fetch('9900011111'), isNull);
+
+    await _tapKey(tester, 'dob-field');
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('address-field')),
+      '18, 3rd Cross, Ejipura, Bengaluru 560047',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('licence-field')),
+      'ka0120150012345',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('aadhaar-field')),
+      '1234 1234 1234',
+    );
+    await _tapKey(tester, 'licence-camera');
+    // One photo is not enough.
+    await _tapKey(tester, 'submit-documents-button');
+    expect(find.text('Add a photo of both documents.'), findsOneWidget);
+    await _tapKey(tester, 'aadhaar-gallery');
+    await _tapKey(tester, 'submit-documents-button');
+
+    final saved = await documents.fetch('9900011111');
+    expect(saved, isNotNull);
+    expect(saved!.licenceNumber, 'KA0120150012345');
+    expect(saved.aadhaarNumber, '123412341234');
+    expect(saved.address, '18, 3rd Cross, Ejipura, Bengaluru 560047');
+    expect(saved.licenceUrl, 'sample://licence');
+    expect(saved.aadhaarUrl, 'sample://aadhaar');
+    expect(
+      RiderDocuments.ageOn(saved.dateOfBirth, DateTime.now()),
+      greaterThanOrEqualTo(RiderDocuments.minimumAge),
+    );
+    // Submitted: the orders open.
+    expect(find.byType(OrdersScreen), findsOneWidget);
+  });
+
+  test('rider documents: age and Aadhaar checks', () {
+    expect(RiderDocuments.ageOn(DateTime(2000, 6, 15), DateTime(2026, 6, 14)), 25);
+    expect(RiderDocuments.ageOn(DateTime(2000, 6, 15), DateTime(2026, 6, 15)), 26);
+    expect(RiderDocuments.aadhaarProblem('1234 5678 9012'), isNull);
+    expect(RiderDocuments.aadhaarProblem('12345'), isNotNull);
+    final docs = RiderDocuments.fromMap(
+      RiderDocuments(
+        dateOfBirth: DateTime(1996, 4, 12),
+        address: 'A',
+        licenceNumber: 'L',
+        aadhaarNumber: '123412341234',
+      ).toMap(),
+    );
+    expect(docs.dateOfBirth, DateTime(1996, 4, 12));
   });
 
   testWidgets('rejecting removes the order after confirmation', (tester) async {
@@ -445,4 +598,46 @@ void main() {
     expect(find.text('This number is not registered'), findsOneWidget);
     expect(find.textContaining('+919900011111'), findsOneWidget);
   });
+  testWidgets('Help on the profile page lists the questions with answers', (
+    tester,
+  ) async {
+    await _pumpApp(tester);
+    await tester.tap(find.text('Profile'));
+    await tester.pumpAndSettle();
+    await _tapKey(tester, 'help-tile');
+    expect(find.byKey(const ValueKey('help-list')), findsOneWidget);
+    expect(find.text('How do I go offline?'), findsOneWidget);
+    // The answer opens when the question is tapped.
+    await tester.tap(find.text('How do I go offline?'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Switch off "Available for orders" on the Profile page.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('terms and privacy policy open from the profile page', (
+    tester,
+  ) async {
+    await _pumpApp(tester);
+    await tester.tap(find.text('Profile'));
+    await tester.pumpAndSettle();
+    await _tapKey(tester, 'terms-tile');
+    expect(
+      tester
+          .widget<SelectableText>(find.byKey(const ValueKey('legal-body')))
+          .data,
+      'Sample terms and conditions text.',
+    );
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await _tapKey(tester, 'privacy-tile');
+    expect(
+      tester
+          .widget<SelectableText>(find.byKey(const ValueKey('legal-body')))
+          .data,
+      'Sample privacy policy text.',
+    );
+  });
+
 }

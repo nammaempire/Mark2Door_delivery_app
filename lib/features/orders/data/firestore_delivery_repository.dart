@@ -109,6 +109,16 @@ class FirestoreDeliveryRepository implements DeliveryRepository {
     );
   }
 
+  @override
+  Future<void> recordQrPayment(String orderId, {required String proofUrl}) =>
+      // Not queued for later: the customer has just paid online, so there
+      // is signal, and the store should see the proof straight away.
+      _orders.doc(orderId).update({
+        'codPaidBy': 'qr',
+        'paymentProofUrl': proofUrl,
+        'codPaidAt': DateTime.now().millisecondsSinceEpoch,
+      }).timeout(const Duration(seconds: 20));
+
   /// Maps an `orders/{id}` document to what the rider needs.
   static DeliveryOrder orderFromMap(String id, Map<String, dynamic> map) {
     int number(String key) => (map[key] as num?)?.toInt() ?? 0;
@@ -137,6 +147,7 @@ class FirestoreDeliveryRepository implements DeliveryRepository {
       // customer already paid from their m2d wallet.
       totalPaise: number('totalPaise') - number('walletAppliedPaise'),
       cashOnDelivery: map['paymentMethod'] == 'cod',
+      paidByQr: map['codPaidBy'] == 'qr',
       customerName: address['name'] as String? ?? '',
       customerPhone: address['phone'] as String? ?? '',
       addressLine: address['line1'] as String? ?? '',

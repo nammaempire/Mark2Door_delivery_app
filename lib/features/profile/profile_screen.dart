@@ -9,6 +9,7 @@ import '../auth/presentation/auth_header.dart';
 import '../orders/application/delivery_providers.dart';
 import '../orders/presentation/order_widgets.dart';
 import 'delete_account.dart';
+import 'help.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -151,6 +152,57 @@ class ProfileScreen extends ConsumerWidget {
                   ),
                   subtitle: Text('Pickup point · ${store.address}'),
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          SoftCard(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Column(
+              children: [
+                ListTile(
+                  key: const ValueKey('help-tile'),
+                  leading: const Icon(Icons.help_outline_rounded),
+                  title: const Text(
+                    'Help',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text('Answers to common questions'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const HelpScreen(),
+                    ),
+                  ),
+                ),
+                for (final (id, icon, key) in const [
+                  (
+                    LegalPages.termsId,
+                    Icons.description_outlined,
+                    'terms-tile',
+                  ),
+                  (
+                    LegalPages.privacyId,
+                    Icons.privacy_tip_outlined,
+                    'privacy-tile',
+                  ),
+                ]) ...[
+                  const Divider(indent: 16, endIndent: 16),
+                  ListTile(
+                    key: ValueKey(key),
+                    leading: Icon(icon),
+                    title: Text(
+                      LegalPages.titleOf(id),
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => LegalScreen(pageId: id),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

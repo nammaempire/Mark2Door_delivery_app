@@ -266,11 +266,15 @@ class _HistoryRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  order.cashOnDelivery ? 'Cash' : 'Paid online',
+                  order.collectsCash
+                      ? 'Cash'
+                      : order.paidByQr
+                          ? 'Paid by QR'
+                          : 'Paid online',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: order.cashOnDelivery
+                    color: order.collectsCash
                         ? AppColors.accentDark
                         : AppColors.success,
                   ),

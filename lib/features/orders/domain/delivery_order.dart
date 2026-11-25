@@ -41,6 +41,7 @@ class DeliveryOrder {
     this.rating,
     this.cashHandedOver = false,
     this.awaitingSync = false,
+    this.paidByQr = false,
     this.latitude,
     this.longitude,
   });
@@ -99,7 +100,7 @@ class DeliveryOrder {
 
   int get itemCount => items.fold(0, (sum, i) => sum + i.quantity);
 
-  int get cashToCollectPaise => cashOnDelivery ? totalPaise : 0;
+  int get cashToCollectPaise => collectsCash ? totalPaise : 0;
 
   /// Stars (1 to 5) the customer gave this delivery; null until rated.
   final int? rating;
@@ -110,6 +111,14 @@ class DeliveryOrder {
   /// Delivered with no signal: the app shows it as delivered, and the
   /// store is told as soon as the phone is back online.
   final bool awaitingSync;
+
+  /// A cash-on-delivery order the customer paid at the door by scanning
+  /// the store's QR instead of handing over cash. The rider holds no
+  /// money for it.
+  final bool paidByQr;
+
+  /// Still needs money collected at the door, in cash or by QR.
+  bool get collectsCash => cashOnDelivery && !paidByQr;
 
   /// Exact spot the customer pinned for this address in their app; null
   /// when they did not, in which case the map looks the address up.
@@ -139,6 +148,7 @@ class DeliveryOrder {
     DateTime? deliveredAt,
     DateTime? acceptedAt,
     bool? awaitingSync,
+    bool? paidByQr,
   }) =>
       DeliveryOrder(
         id: id,
@@ -160,6 +170,7 @@ class DeliveryOrder {
         rating: rating,
         cashHandedOver: cashHandedOver,
         awaitingSync: awaitingSync ?? this.awaitingSync,
+        paidByQr: paidByQr ?? this.paidByQr,
         latitude: latitude,
         longitude: longitude,
       );
