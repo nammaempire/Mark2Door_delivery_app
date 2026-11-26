@@ -106,7 +106,33 @@ class _SplashScreenState extends State<SplashScreen>
                   color: _logoMaroon,
                 ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 28),
+              FadeTransition(
+                opacity: _fade,
+                child: const Text.rich(
+                  key: Key('splash-powered-by'),
+                  TextSpan(
+                    style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 12,
+                      letterSpacing: 0.3,
+                    ),
+                    children: [
+                      TextSpan(text: 'Powered by '),
+                      TextSpan(
+                        text: 'KEFINDIA',
+                        style: TextStyle(
+                          color: _logoMaroon,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
             ],
           ),
         ),
